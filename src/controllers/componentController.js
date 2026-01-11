@@ -15,27 +15,6 @@ const parseFloatNum = (val) => {
     return isNaN(n) ? 0.0 : n;
 };
 
-// Helper to map Frontend "TYPE" to exact Prisma Model Names
-const getPrismaModelName = (type) => {
-    const map = {
-        'PROCESSOR': 'processor',
-        'MOTHERBOARD': 'motherboard',
-        'GRAPHICS_CARD': 'graphicsCard',
-        'POWER_SUPPLY': 'powerSupply',
-        'RAM': 'ram',
-        'CPU_COOLER': 'cpuCooler',
-        'SSD': 'ssd',
-        'HDD': 'hdd',
-        'CABINET': 'cabinet',
-        'MONITOR': 'monitor',
-        'KEYBOARD': 'keyboard',
-        'MOUSE': 'mouse',
-        'HEADSET': 'headset',
-        'ADDITIONAL_CASE_FANS': 'additionalCaseFans'
-    };
-    return map[type.toUpperCase()];
-};
-
 exports.getComponents = async (req, res) => {
     try {
         const { type, search } = req.query;
@@ -103,6 +82,7 @@ exports.getComponentById = async (req, res) => {
     try {
         const { id } = req.params;
 
+        // Note: Relation fields must match schema.prisma (snake_case)
         const base = await prisma.component.findUnique({
             where: { id },
             include: { 
@@ -110,10 +90,10 @@ exports.getComponentById = async (req, res) => {
                 externalIds: true,
                 processor: true,
                 motherboard: true,
-                graphicsCard: true, // Matches Schema
-                powerSupply: true,  // Matches Schema
+                graphics_card: true, 
+                power_supply: true, 
                 ram: true,
-                cpuCooler: true,    // Matches Schema
+                cpu_cooler: true, 
                 ssd: true,
                 hdd: true,
                 cabinet: true,
@@ -121,7 +101,7 @@ exports.getComponentById = async (req, res) => {
                 keyboard: true,
                 mouse: true,
                 headset: true,
-                additionalCaseFans: true // Matches Schema
+                additional_case_fans: true 
             },
         });
 
@@ -157,7 +137,6 @@ exports.createComponent = async (req, res) => {
         }
 
         const result = await prisma.$transaction(async (tx) => {
-            // 1. Create Base Component
             const comp = await tx.component.create({
                 data: {
                     type,
@@ -181,10 +160,10 @@ exports.createComponent = async (req, res) => {
                 },
             });
 
-            // 2. Create Specific Model entry using Case-Sensitive Mapper
-            const modelKey = getPrismaModelName(type);
+            // Handle relation model dynamically: e.g., 'GRAPHICS_CARD' -> 'graphics_card'
+            const modelKey = type.toLowerCase();
 
-            if (modelKey && tx[modelKey]) {
+            if (tx[modelKey]) {
                 await tx[modelKey].create({
                     data: {
                         componentId: comp.id,
@@ -223,7 +202,6 @@ exports.updateComponent = async (req, res) => {
         } = req.body;
 
         const result = await prisma.$transaction(async (tx) => {
-            // 1. Update Core Component
             const updatedComp = await tx.component.update({
                 where: { id },
                 data: {
@@ -241,10 +219,9 @@ exports.updateComponent = async (req, res) => {
                 },
             });
 
-            // 2. Update Specific Model using Case-Sensitive Mapper
-            const modelKey = getPrismaModelName(type);
+            const modelKey = type.toLowerCase();
 
-            if (modelKey && tx[modelKey]) {
+            if (tx[modelKey]) {
                 const modelDataUpdate = {};
                 if (tech_specs !== undefined) modelDataUpdate.data = tech_specs;
                 if (core_custom_data !== undefined) modelDataUpdate.core_custom_data = core_custom_data;
