@@ -15,6 +15,27 @@ const parseFloatNum = (val) => {
     return isNaN(n) ? 0.0 : n;
 };
 
+// Helper to map Frontend "TYPE" to exact Prisma Model Names (For DB Actions)
+const getPrismaModelName = (type) => {
+    const map = {
+        'PROCESSOR': 'processor',
+        'MOTHERBOARD': 'motherboard',
+        'GRAPHICS_CARD': 'graphicsCard',
+        'POWER_SUPPLY': 'powerSupply',
+        'RAM': 'ram',
+        'CPU_COOLER': 'cpuCooler',
+        'SSD': 'ssd',
+        'HDD': 'hdd',
+        'CABINET': 'cabinet',
+        'MONITOR': 'monitor',
+        'KEYBOARD': 'keyboard',
+        'MOUSE': 'mouse',
+        'HEADSET': 'headset',
+        'ADDITIONAL_CASE_FANS': 'additionalCaseFans'
+    };
+    return map[type.toUpperCase()];
+};
+
 exports.getComponents = async (req, res) => {
     try {
         const { type, search } = req.query;
@@ -82,7 +103,6 @@ exports.getComponentById = async (req, res) => {
     try {
         const { id } = req.params;
 
-        // Note: Relation fields must match schema.prisma (snake_case)
         const base = await prisma.component.findUnique({
             where: { id },
             include: { 
@@ -107,6 +127,20 @@ exports.getComponentById = async (req, res) => {
 
         if (!base) return res.status(404).json({ error: "Not found" });
 
+        // Clean null relations based on component type
+        const currentRelationKey = base.type.toLowerCase();
+        const relationKeys = [
+            "processor", "motherboard", "graphics_card", "power_supply", 
+            "ram", "cpu_cooler", "ssd", "hdd", "cabinet", 
+            "monitor", "keyboard", "mouse", "headset", "additional_case_fans"
+        ];
+
+        relationKeys.forEach(key => {
+            if (key !== currentRelationKey && base[key] === null) {
+                delete base[key];
+            }
+        });
+
         res.json(base);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -116,18 +150,9 @@ exports.getComponentById = async (req, res) => {
 exports.createComponent = async (req, res) => {
     try {
         const {
-            type,
-            manufacturer,
-            vendor,
-            model_name,
-            model_number,
-            product_page_url,
-            price,
-            discounted_price,
-            tracked_price,
-            specs,
-            tech_specs,
-            core_custom_data
+            type, manufacturer, vendor, model_name, model_number,
+            product_page_url, price, discounted_price, tracked_price,
+            specs, tech_specs, core_custom_data
         } = req.body;
 
         if (!type || !manufacturer || !model_name || !model_number) {
@@ -137,6 +162,7 @@ exports.createComponent = async (req, res) => {
         }
 
         const result = await prisma.$transaction(async (tx) => {
+            // 1. Create Base Component
             const comp = await tx.component.create({
                 data: {
                     type,
@@ -160,10 +186,10 @@ exports.createComponent = async (req, res) => {
                 },
             });
 
-            // Handle relation model dynamically: e.g., 'GRAPHICS_CARD' -> 'graphics_card'
-            const modelKey = type.toLowerCase();
+            // 2. Create Specific Model entry using getPrismaModelName
+            const modelKey = getPrismaModelName(type);
 
-            if (tx[modelKey]) {
+            if (modelKey && tx[modelKey]) {
                 await tx[modelKey].create({
                     data: {
                         componentId: comp.id,
@@ -187,21 +213,13 @@ exports.updateComponent = async (req, res) => {
     try {
         const { id } = req.params;
         const {
-            type,
-            manufacturer,
-            vendor,
-            model_name,
-            model_number,
-            product_page_url,
-            price,
-            discounted_price,
-            tracked_price,
-            specs,
-            tech_specs,
-            core_custom_data
+            type, manufacturer, vendor, model_name, model_number,
+            product_page_url, price, discounted_price, tracked_price,
+            specs, tech_specs, core_custom_data
         } = req.body;
 
         const result = await prisma.$transaction(async (tx) => {
+            // 1. Update Core Component
             const updatedComp = await tx.component.update({
                 where: { id },
                 data: {
@@ -219,9 +237,10 @@ exports.updateComponent = async (req, res) => {
                 },
             });
 
-            const modelKey = type.toLowerCase();
+            // 2. Update Specific Model using getPrismaModelName
+            const modelKey = getPrismaModelName(type);
 
-            if (tx[modelKey]) {
+            if (modelKey && tx[modelKey]) {
                 const modelDataUpdate = {};
                 if (tech_specs !== undefined) modelDataUpdate.data = tech_specs;
                 if (core_custom_data !== undefined) modelDataUpdate.core_custom_data = core_custom_data;
