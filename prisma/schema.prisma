@@ -1,0 +1,219 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- MASTER COMPONENT TABLE ---
+model Component {
+  id                String   @id @default(uuid())
+  type              String   
+  manufacturer      String   @db.VarChar(255)
+  vendor            String?  @db.VarChar(255)
+  model_name        String   @db.VarChar(255)
+  model_number      String   @db.VarChar(255)
+  product_page_url  String?  @db.Text
+  
+  price             Decimal? @db.Decimal(10, 2)
+  discounted_price  Decimal? @db.Decimal(10, 2)
+  tracked_price     Decimal? @db.Decimal(10, 2)
+   
+  specs             Json?    @default("{}")
+
+  processor         Processor?
+  motherboard       Motherboard?
+  graphics_card     GraphicsCard?
+  power_supply      PowerSupply?
+  ram               Ram?
+  cpu_cooler        CpuCooler?
+  ssd               Ssd?
+  hdd               Hdd?
+  cabinet           Cabinet?
+  monitor           Monitor?
+  keyboard          Keyboard?
+  mouse             Mouse?
+  headset           Headset?
+  additional_case_fans AdditionalCaseFans?
+
+  offers            Offer[]
+  externalIds       ExternalId[] 
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([manufacturer, model_number, model_name])
+}
+
+// --- SPECIFIC COMPONENT TABLES ---
+
+model Processor {
+  id                String    @id @default(uuid())
+  componentId       String    @unique
+  component         Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  core_custom_data  Json      @default("{}") // Added: For custom fields in Core Identity section
+  data              Json      @default("{}") // Technical specs
+}
+
+model Motherboard {
+  id                String    @id @default(uuid())
+  componentId       String    @unique
+  component         Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  core_custom_data  Json      @default("{}") // Added
+  data              Json      @default("{}")
+}
+
+model GraphicsCard {
+  id                String    @id @default(uuid())
+  componentId       String    @unique
+  component         Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  core_custom_data  Json      @default("{}") // Added
+  data              Json      @default("{}")
+}
+
+model PowerSupply {
+  id                String    @id @default(uuid())
+  componentId       String    @unique
+  component         Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  core_custom_data  Json      @default("{}") // Added
+  data              Json      @default("{}")
+}
+
+model Ram {
+  id                String    @id @default(uuid())
+  componentId       String    @unique
+  component         Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  core_custom_data  Json      @default("{}") // Added
+  data              Json      @default("{}")
+}
+
+model CpuCooler {
+  id                String    @id @default(uuid())
+  componentId       String    @unique
+  component         Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  core_custom_data  Json      @default("{}") // Added
+  data              Json      @default("{}")
+}
+
+model Ssd {
+  id                String    @id @default(uuid())
+  componentId       String    @unique
+  component         Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  core_custom_data  Json      @default("{}") // Added
+  data              Json      @default("{}")
+}
+
+model Hdd {
+  id                String    @id @default(uuid())
+  componentId       String    @unique
+  component         Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  core_custom_data  Json      @default("{}") // Added
+  data              Json      @default("{}")
+}
+
+model Cabinet {
+  id                String    @id @default(uuid())
+  componentId       String    @unique
+  component         Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  core_custom_data  Json      @default("{}") // Added
+  data              Json      @default("{}")
+}
+
+model Monitor {
+  id                String    @id @default(uuid())
+  componentId       String    @unique
+  component         Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  core_custom_data  Json      @default("{}") // Added
+  data              Json      @default("{}")
+}
+
+model Keyboard {
+  id                String    @id @default(uuid())
+  componentId       String    @unique
+  component         Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  core_custom_data  Json      @default("{}") // Added
+  data              Json      @default("{}")
+}
+
+model Mouse {
+  id                String    @id @default(uuid())
+  componentId       String    @unique
+  component         Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  core_custom_data  Json      @default("{}") // Added
+  data              Json      @default("{}")
+}
+
+model Headset {
+  id                String    @id @default(uuid())
+  componentId       String    @unique
+  component         Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  core_custom_data  Json      @default("{}") // Added
+  data              Json      @default("{}")
+}
+
+model AdditionalCaseFans {
+  id                String    @id @default(uuid())
+  componentId       String    @unique
+  component         Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  core_custom_data  Json      @default("{}") // Added
+  data              Json      @default("{}")
+}
+
+// --- REST OF THE TABLES ---
+
+model Vendor {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  website   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Category {
+  id        String   @id @default(uuid())
+  name      String   @unique 
+  slug      String   @unique 
+  specKeys  Json?    
+  createdAt DateTime @default(now())
+}
+
+model ExternalId {
+  id            String    @id @default(uuid())
+  componentId   String
+  component     Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  externalUrl   String
+  sourceId      String?   
+  isActive      Boolean   @default(true)
+  lastCheckedAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Offer {
+  id              String    @id @default(uuid())
+  componentId     String
+  component       Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  vendor          String    
+  price           Int
+  in_stock        Boolean   @default(true)
+  url             String
+  sourceId        String?   
+  shipping        Int       @default(0)
+  effective_price Int?
+  updatedAt       DateTime  @updatedAt
+}
+
+model CompatibilityRule {
+  id          String   @id @default(uuid())
+  name        String
+  severity    String   
+  message     String
+  appliesTo   String[] 
+  logic       Json     
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
