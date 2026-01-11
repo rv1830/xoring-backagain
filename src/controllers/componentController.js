@@ -2,24 +2,38 @@ const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
 const { scrapeSpecs } = require("../utils/scraper");
 
-// --- Helper to prevent NaN Crashes ---
+// --- Helpers to prevent NaN and Type Errors ---
 const parseNum = (val) => {
     if (val === undefined || val === null || val === "") return undefined;
     const n = Number(val);
     return isNaN(n) ? 0 : n;
 };
 
-// --- Helper to parse Float ---
 const parseFloatNum = (val) => {
     if (val === undefined || val === null || val === "") return undefined;
     const n = parseFloat(val);
     return isNaN(n) ? 0.0 : n;
 };
 
-// --- Helper for Booleans ---
-const parseBool = (val) => {
-    if (val === undefined || val === null) return undefined;
-    return val === "true" || val === "True" || val === true;
+// Helper to map Frontend "TYPE" to exact Prisma Model Names
+const getPrismaModelName = (type) => {
+    const map = {
+        'PROCESSOR': 'processor',
+        'MOTHERBOARD': 'motherboard',
+        'GRAPHICS_CARD': 'graphicsCard',
+        'POWER_SUPPLY': 'powerSupply',
+        'RAM': 'ram',
+        'CPU_COOLER': 'cpuCooler',
+        'SSD': 'ssd',
+        'HDD': 'hdd',
+        'CABINET': 'cabinet',
+        'MONITOR': 'monitor',
+        'KEYBOARD': 'keyboard',
+        'MOUSE': 'mouse',
+        'HEADSET': 'headset',
+        'ADDITIONAL_CASE_FANS': 'additionalCaseFans'
+    };
+    return map[type.toUpperCase()];
 };
 
 exports.getComponents = async (req, res) => {
@@ -64,24 +78,20 @@ exports.getComponents = async (req, res) => {
             orderBy: { updatedAt: "desc" },
         });
 
-        const formatted = components.map((c) => {
-            const formattedUpdatedAt = c.updatedAt instanceof Date ? c.updatedAt.toISOString() : null;
-
-            return {
-                id: c.id,
-                type: c.type,
-                name: `${c.manufacturer} ${c.model_name}`.trim(),
-                manufacturer: c.manufacturer,
-                vendor: c.vendor || (c.offers[0] ? c.offers[0].vendor : "N/A"),
-                model_name: c.model_name,
-                model_number: c.model_number,
-                product_page_url: c.product_page_url,
-                price: c.price ? parseFloat(c.price) : null,
-                discounted_price: c.discounted_price ? parseFloat(c.discounted_price) : null,
-                tracked_price: c.tracked_price ? parseFloat(c.tracked_price) : null,
-                updatedAt: formattedUpdatedAt,
-            };
-        });
+        const formatted = components.map((c) => ({
+            id: c.id,
+            type: c.type,
+            name: `${c.manufacturer} ${c.model_name}`.trim(),
+            manufacturer: c.manufacturer,
+            vendor: c.vendor || (c.offers[0] ? c.offers[0].vendor : "N/A"),
+            model_name: c.model_name,
+            model_number: c.model_number,
+            product_page_url: c.product_page_url,
+            price: c.price ? parseFloat(c.price) : null,
+            discounted_price: c.discounted_price ? parseFloat(c.discounted_price) : null,
+            tracked_price: c.tracked_price ? parseFloat(c.tracked_price) : null,
+            updatedAt: c.updatedAt instanceof Date ? c.updatedAt.toISOString() : null,
+        }));
 
         res.json(formatted);
     } catch (error) {
@@ -100,10 +110,10 @@ exports.getComponentById = async (req, res) => {
                 externalIds: true,
                 processor: true,
                 motherboard: true,
-                graphics_card: true,
-                power_supply: true,
+                graphicsCard: true, // Matches Schema
+                powerSupply: true,  // Matches Schema
                 ram: true,
-                cpu_cooler: true,
+                cpuCooler: true,    // Matches Schema
                 ssd: true,
                 hdd: true,
                 cabinet: true,
@@ -111,7 +121,7 @@ exports.getComponentById = async (req, res) => {
                 keyboard: true,
                 mouse: true,
                 headset: true,
-                additional_case_fans: true
+                additionalCaseFans: true // Matches Schema
             },
         });
 
@@ -136,7 +146,8 @@ exports.createComponent = async (req, res) => {
             discounted_price,
             tracked_price,
             specs,
-            tech_specs, // Front-end now sends this for specific model "data" field
+            tech_specs,
+            core_custom_data
         } = req.body;
 
         if (!type || !manufacturer || !model_name || !model_number) {
@@ -146,7 +157,7 @@ exports.createComponent = async (req, res) => {
         }
 
         const result = await prisma.$transaction(async (tx) => {
-            // 1. Create Component
+            // 1. Create Base Component
             const comp = await tx.component.create({
                 data: {
                     type,
@@ -155,9 +166,9 @@ exports.createComponent = async (req, res) => {
                     model_name,
                     model_number,
                     product_page_url: product_page_url || null,
-                    price: price ? parseFloat(price) : null,
-                    discounted_price: discounted_price ? parseFloat(discounted_price) : null,
-                    tracked_price: tracked_price ? parseFloat(tracked_price) : null,
+                    price: price ? parseFloatNum(price) : null,
+                    discounted_price: discounted_price ? parseFloatNum(discounted_price) : null,
+                    tracked_price: tracked_price ? parseFloatNum(tracked_price) : null,
                     specs: specs || {},
                     offers: price ? {
                         create: {
@@ -170,19 +181,15 @@ exports.createComponent = async (req, res) => {
                 },
             });
 
-            // 2. Create Specific Model entry using the JSON "data" field
-            const modelKey = type.toLowerCase();
-            const validModels = [
-                "processor", "motherboard", "graphics_card", "power_supply", "ram", 
-                "cpu_cooler", "ssd", "hdd", "cabinet", "monitor", "keyboard", 
-                "mouse", "headset", "additional_case_fans"
-            ];
+            // 2. Create Specific Model entry using Case-Sensitive Mapper
+            const modelKey = getPrismaModelName(type);
 
-            if (validModels.includes(modelKey)) {
+            if (modelKey && tx[modelKey]) {
                 await tx[modelKey].create({
                     data: {
                         componentId: comp.id,
-                        data: tech_specs || {} // Dump everything into the Json field
+                        core_custom_data: core_custom_data || {},
+                        data: tech_specs || {}
                     }
                 });
             }
@@ -211,45 +218,41 @@ exports.updateComponent = async (req, res) => {
             discounted_price,
             tracked_price,
             specs,
-            tech_specs
+            tech_specs,
+            core_custom_data
         } = req.body;
 
         const result = await prisma.$transaction(async (tx) => {
             // 1. Update Core Component
-            const updateData = {
-                type,
-                manufacturer,
-                vendor: vendor || null,
-                model_name,
-                model_number,
-                product_page_url: product_page_url || null,
-                price: price ? parseFloat(price) : null,
-                discounted_price: discounted_price ? parseFloat(discounted_price) : null,
-                tracked_price: tracked_price ? parseFloat(tracked_price) : null,
-                specs: specs || {},
-                updatedAt: new Date()
-            };
-
             const updatedComp = await tx.component.update({
                 where: { id },
-                data: updateData,
+                data: {
+                    type,
+                    manufacturer,
+                    vendor: vendor || null,
+                    model_name,
+                    model_number,
+                    product_page_url: product_page_url || null,
+                    price: price ? parseFloatNum(price) : null,
+                    discounted_price: discounted_price ? parseFloatNum(discounted_price) : null,
+                    tracked_price: tracked_price ? parseFloatNum(tracked_price) : null,
+                    specs: specs || {},
+                    updatedAt: new Date()
+                },
             });
 
-            // 2. Update Specific Model "data" field
-            if (tech_specs && type) {
-                const modelKey = type.toLowerCase();
-                const validModels = [
-                    "processor", "motherboard", "graphics_card", "power_supply", "ram", 
-                    "cpu_cooler", "ssd", "hdd", "cabinet", "monitor", "keyboard", 
-                    "mouse", "headset", "additional_case_fans"
-                ];
+            // 2. Update Specific Model using Case-Sensitive Mapper
+            const modelKey = getPrismaModelName(type);
 
-                if (validModels.includes(modelKey)) {
-                    await tx[modelKey].update({
-                        where: { componentId: id },
-                        data: { data: tech_specs },
-                    });
-                }
+            if (modelKey && tx[modelKey]) {
+                const modelDataUpdate = {};
+                if (tech_specs !== undefined) modelDataUpdate.data = tech_specs;
+                if (core_custom_data !== undefined) modelDataUpdate.core_custom_data = core_custom_data;
+
+                await tx[modelKey].update({
+                    where: { componentId: id },
+                    data: modelDataUpdate,
+                });
             }
 
             return updatedComp;
