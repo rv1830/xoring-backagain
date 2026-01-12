@@ -225,8 +225,8 @@ exports.updateComponent = async (req, res) => {
             specs, tech_specs, core_custom_data
         } = req.body;
 
-        // FIXED: Initialize with current body value, but overwrite strictly if scrape succeeds
         let finalTrackedPrice = tracked_price ? parseFloatNum(tracked_price) : undefined;
+        let scrapeWarning = null;
 
         if (product_page_url) {
             console.log(`[Scraper] Re-checking price for updated URL: ${product_page_url}`);
@@ -235,7 +235,9 @@ exports.updateComponent = async (req, res) => {
                 finalTrackedPrice = scrapedData.price;
                 console.log(`[Scraper] Price updated successfully: ₹${finalTrackedPrice}`);
             } else {
-                console.log(`[Scraper] Scrape failed or returned zero, using provided/existing value.`);
+                finalTrackedPrice = 0;
+                scrapeWarning = "Not able to parsed";
+                console.log(`[Scraper] Scrape failed or returned zero, setting tracked price to 0.`);
             }
         }
 
@@ -275,7 +277,7 @@ exports.updateComponent = async (req, res) => {
             result.updatedAt = result.updatedAt.toISOString();
         }
 
-        res.json({ success: true, data: result });
+        res.json({ success: true, data: result, warning: scrapeWarning });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

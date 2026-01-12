@@ -3,15 +3,14 @@ const puppeteer = require('puppeteer');
 const parsePrice = (priceStr) => {
     if (!priceStr) return 0;
     
-    // Step 1: Agar string mein decimal (.) hai, toh sirf pehle wala hissa lo (Paisa hata do)
-    // Jaise: "5,310.00" -> "5,310"
+    // Step 1: Paisa hata do
     const cleanStr = priceStr.split('.')[0];
     
-    // Step 2: Sirf digits nikalne ke liye regex use karo
+    // Step 2: Digits nikalne ke liye regex
     const matches = cleanStr.match(/[\d,]+/g);
     if (!matches) return 0;
     
-    // Step 3: Comma hatao aur number mein convert karo
+    // Step 3: Parse number
     const prices = matches
         .map(m => parseInt(m.replace(/[^\d]/g, '')))
         .filter(n => !isNaN(n) && n > 0);
@@ -106,7 +105,6 @@ async function scrapeUrl(url) {
         else if (url.includes('elitehubs.com')) {
             vendor = "elitehubs";
             rawPriceText = await page.evaluate(() => {
-                // Strictly targeting the selector from your image: #js-product-price.current
                 const el = document.querySelector('#js-product-price.current') || 
                            document.querySelector('.price .current') ||
                            document.querySelector('.price .woocommerce-Price-amount') || 
