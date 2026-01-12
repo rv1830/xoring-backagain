@@ -47,13 +47,12 @@ async function scrapeUrl(url) {
 
         let price = 0;
         let inStock = false;
-        let vendor = ""; // Vendor wapas add kar diya
+        let vendor = ""; 
         let rawPriceText = "";
 
         if (url.includes('mdcomputers.in')) {
             vendor = "mdcomputers";
             rawPriceText = await page.evaluate(() => {
-                // Strictly targeting the main product price box
                 const priceBox = document.querySelector('.product-price-info-group .price-box');
                 if (priceBox) {
                     const specialPrice = priceBox.querySelector('h2.special-price');
@@ -75,7 +74,6 @@ async function scrapeUrl(url) {
         else if (url.includes('vedantcomputers.com')) {
             vendor = "vedant";
             rawPriceText = await page.evaluate(() => {
-                // Strictly targeting the selector from your image
                 const el = document.querySelector('.product-price-new') || 
                            document.querySelector('.product-price') || 
                            document.querySelector('.price-new');
@@ -86,9 +84,16 @@ async function scrapeUrl(url) {
         else if (url.includes('primeabgb.com')) {
             vendor = "primeabgb";
             rawPriceText = await page.evaluate(() => {
-                const el = document.querySelector('ins .woocommerce-Price-amount') || 
-                           document.querySelector('.price');
-                return el?.innerText || '0';
+                // Strictly targeting the selector from your image
+                const summary = document.querySelector('.summary.entry-summary');
+                if (summary) {
+                    const insPrice = summary.querySelector('ins .woocommerce-Price-amount');
+                    if (insPrice) return insPrice.innerText;
+                    
+                    const singlePrice = summary.querySelector('.price .woocommerce-Price-amount');
+                    if (singlePrice) return singlePrice.innerText;
+                }
+                return '0';
             });
             inStock = await page.evaluate(() => !document.querySelector('.stock.out-of-stock'));
         }
@@ -106,7 +111,7 @@ async function scrapeUrl(url) {
         console.log(`[Scraper] 💰 Parsed: ₹${price} (Stock: ${inStock})`);
 
         await browser.close();
-        return { vendor, price, inStock }; // Vendor return kar rha hai
+        return { vendor, price, inStock }; 
 
     } catch (error) {
         console.error(`[Scraper] ❌ Failure: ${error.message}`);
