@@ -47,20 +47,18 @@ async function scrapeUrl(url) {
 
         let price = 0;
         let inStock = false;
-        let vendor = "";
+        let vendor = ""; // Vendor wapas add kar diya
         let rawPriceText = "";
 
         if (url.includes('mdcomputers.in')) {
             vendor = "mdcomputers";
             rawPriceText = await page.evaluate(() => {
-                // Strictly targeting the main product price box from your image
+                // Strictly targeting the main product price box
                 const priceBox = document.querySelector('.product-price-info-group .price-box');
                 if (priceBox) {
                     const specialPrice = priceBox.querySelector('h2.special-price');
                     if (specialPrice) return specialPrice.innerText;
                 }
-                
-                // Fallback selectors
                 const fallback = document.querySelector('.price-new') || 
                                  document.querySelector('.product-price') || 
                                  document.querySelector('.price');
@@ -82,10 +80,7 @@ async function scrapeUrl(url) {
                            document.querySelector('.price');
                 return el?.innerText || '0';
             });
-            inStock = await page.evaluate(() => {
-                const btn = document.querySelector('#button-cart');
-                return !!btn;
-            });
+            inStock = await page.evaluate(() => !!document.querySelector('#button-cart'));
         }
         else if (url.includes('primeabgb.com')) {
             vendor = "primeabgb";
@@ -94,11 +89,7 @@ async function scrapeUrl(url) {
                            document.querySelector('.price');
                 return el?.innerText || '0';
             });
-            inStock = await page.evaluate(() => {
-                const stockEl = document.querySelector('.stock');
-                if (stockEl && stockEl.innerText.toLowerCase().includes('out of stock')) return false;
-                return !!document.querySelector('.single_add_to_cart_button');
-            });
+            inStock = await page.evaluate(() => !document.querySelector('.stock.out-of-stock'));
         }
         else if (url.includes('elitehubs.com')) {
             vendor = "elitehubs";
@@ -107,21 +98,17 @@ async function scrapeUrl(url) {
                            document.querySelector('.price');
                 return el?.innerText || '0';
             });
-            inStock = await page.evaluate(() => {
-                const stockEl = document.querySelector('.stock');
-                if (stockEl && stockEl.innerText.toLowerCase().includes('out of stock')) return false;
-                return !!document.querySelector('.single_add_to_cart_button');
-            });
+            inStock = await page.evaluate(() => !document.querySelector('.stock.out-of-stock'));
         }
 
         price = parsePrice(rawPriceText);
-        console.log(`[Scraper] 💰 Parsed: ₹${price} (Stock: ${inStock}) | Time: ${(Date.now() - start)/1000}s`);
+        console.log(`[Scraper] 💰 Parsed: ₹${price} (Stock: ${inStock})`);
 
         await browser.close();
-        return { vendor, price, inStock };
+        return { vendor, price, inStock }; // Vendor return kar rha hai
 
     } catch (error) {
-        console.error(`[Scraper] ❌ Critical Failure: ${error.message}`);
+        console.error(`[Scraper] ❌ Failure: ${error.message}`);
         await browser.close();
         return null;
     }
@@ -129,7 +116,6 @@ async function scrapeUrl(url) {
 
 async function scrapeSpecs(url) {
     if (!url) return {};
-    console.log(`[Scraper] 📑 Fetching Specs: ${url}`);
     const browser = await puppeteer.launch(launchOptions);
     const page = await browser.newPage();
     try {
@@ -150,7 +136,6 @@ async function scrapeSpecs(url) {
         await browser.close();
         return extractedSpecs;
     } catch (error) {
-        console.error(`[Scraper] ❌ Spec Fetch Error: ${error.message}`);
         await browser.close();
         return {};
     }

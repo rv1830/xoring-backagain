@@ -1,6 +1,6 @@
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
-const { scrapeSpecs, scrapeUrl } = require("../utils/scraper"); // Added scrapeUrl to imports
+const { scrapeSpecs, scrapeUrl } = require("../utils/scraper");
 
 // --- Helpers to prevent NaN and Type Errors ---
 const parseNum = (val) => {
@@ -162,7 +162,6 @@ exports.createComponent = async (req, res) => {
             });
         }
 
-        // --- INSTANT SCRAPE LOGIC ---
         let initialTrackedPrice = tracked_price ? parseFloatNum(tracked_price) : null;
         if (product_page_url) {
             console.log(`[Scraper] Initializing immediate price fetch for: ${product_page_url}`);
@@ -170,8 +169,6 @@ exports.createComponent = async (req, res) => {
             if (scrapedData && scrapedData.price) {
                 initialTrackedPrice = scrapedData.price;
                 console.log(`[Scraper] Successfully fetched price: ₹${initialTrackedPrice}`);
-            } else {
-                console.log("[Scraper] No price found during initial fetch.");
             }
         }
 
@@ -186,7 +183,7 @@ exports.createComponent = async (req, res) => {
                     product_page_url: product_page_url || null,
                     price: price ? parseFloatNum(price) : null,
                     discounted_price: discounted_price ? parseFloatNum(discounted_price) : null,
-                    tracked_price: initialTrackedPrice, // Set the scraped price here
+                    tracked_price: initialTrackedPrice,
                     specs: specs || {},
                     offers: price ? {
                         create: {
@@ -200,7 +197,6 @@ exports.createComponent = async (req, res) => {
             });
 
             const modelKey = getPrismaModelName(type);
-
             if (modelKey && tx[modelKey]) {
                 await tx[modelKey].create({
                     data: {
@@ -210,14 +206,11 @@ exports.createComponent = async (req, res) => {
                     }
                 });
             }
-
             return comp;
         });
 
-        console.log(`--- [Create Component] Success: Component Created with ID ${result.id} ---`);
         res.status(201).json({ id: result.id, message: "Component created successfully" });
     } catch (error) {
-        console.error("--- [Create Component] Critical Failure ---", error.message);
         res.status(500).json({ error: error.message || "Failed to create component" });
     }
 };
@@ -232,14 +225,17 @@ exports.updateComponent = async (req, res) => {
             specs, tech_specs, core_custom_data
         } = req.body;
 
-        // --- INSTANT SCRAPE LOGIC FOR UPDATE ---
-        let updatedTrackedPrice = tracked_price ? parseFloatNum(tracked_price) : undefined;
+        // FIXED: Initialize with current body value, but overwrite strictly if scrape succeeds
+        let finalTrackedPrice = tracked_price ? parseFloatNum(tracked_price) : undefined;
+
         if (product_page_url) {
             console.log(`[Scraper] Re-checking price for updated URL: ${product_page_url}`);
             const scrapedData = await scrapeUrl(product_page_url);
-            if (scrapedData && scrapedData.price) {
-                updatedTrackedPrice = scrapedData.price;
-                console.log(`[Scraper] Price updated successfully: ₹${updatedTrackedPrice}`);
+            if (scrapedData && scrapedData.price && scrapedData.price > 0) {
+                finalTrackedPrice = scrapedData.price;
+                console.log(`[Scraper] Price updated successfully: ₹${finalTrackedPrice}`);
+            } else {
+                console.log(`[Scraper] Scrape failed or returned zero, using provided/existing value.`);
             }
         }
 
@@ -255,14 +251,13 @@ exports.updateComponent = async (req, res) => {
                     product_page_url: product_page_url || null,
                     price: price ? parseFloatNum(price) : null,
                     discounted_price: discounted_price ? parseFloatNum(discounted_price) : null,
-                    tracked_price: updatedTrackedPrice, // Update the price here
+                    tracked_price: finalTrackedPrice, 
                     specs: specs || {},
                     updatedAt: new Date()
                 },
             });
 
             const modelKey = getPrismaModelName(type);
-
             if (modelKey && tx[modelKey]) {
                 const modelDataUpdate = {};
                 if (tech_specs !== undefined) modelDataUpdate.data = tech_specs;
@@ -273,7 +268,6 @@ exports.updateComponent = async (req, res) => {
                     data: modelDataUpdate,
                 });
             }
-
             return updatedComp;
         });
 
@@ -281,10 +275,8 @@ exports.updateComponent = async (req, res) => {
             result.updatedAt = result.updatedAt.toISOString();
         }
 
-        console.log("--- [Update Component] Success: Data Synchronized ---");
         res.json({ success: true, data: result });
     } catch (error) {
-        console.error("--- [Update Component] Failure ---", error.message);
         res.status(500).json({ error: error.message });
     }
 };
@@ -292,7 +284,6 @@ exports.updateComponent = async (req, res) => {
 exports.addManualOffer = async (req, res) => {
     try {
         const { componentId, price, vendorName, inStock, url } = req.body;
-
         const offer = await prisma.offer.create({
             data: {
                 componentId,
@@ -322,7 +313,6 @@ exports.fetchSpecs = async (req, res) => {
     try {
         const { url } = req.body;
         if (!url) return res.status(400).json({ error: "URL required" });
-
         const specs = await scrapeSpecs(url);
         res.json(specs);
     } catch (error) {
