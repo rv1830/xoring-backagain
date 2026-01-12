@@ -75,9 +75,10 @@ async function scrapeUrl(url) {
         else if (url.includes('vedantcomputers.com')) {
             vendor = "vedant";
             rawPriceText = await page.evaluate(() => {
-                const el = document.querySelector('.product-price') || 
-                           document.querySelector('.price-new') || 
-                           document.querySelector('.price');
+                // Strictly targeting the selector from your image
+                const el = document.querySelector('.product-price-new') || 
+                           document.querySelector('.product-price') || 
+                           document.querySelector('.price-new');
                 return el?.innerText || '0';
             });
             inStock = await page.evaluate(() => !!document.querySelector('#button-cart'));
