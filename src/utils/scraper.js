@@ -106,7 +106,10 @@ async function scrapeUrl(url) {
         else if (url.includes('elitehubs.com')) {
             vendor = "elitehubs";
             rawPriceText = await page.evaluate(() => {
-                const el = document.querySelector('.price .woocommerce-Price-amount') || 
+                // Strictly targeting the selector from your image: #js-product-price.current
+                const el = document.querySelector('#js-product-price.current') || 
+                           document.querySelector('.price .current') ||
+                           document.querySelector('.price .woocommerce-Price-amount') || 
                            document.querySelector('.price');
                 return el?.innerText || '0';
             });
