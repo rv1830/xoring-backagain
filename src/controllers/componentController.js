@@ -38,7 +38,17 @@ const getPrismaModelName = (type) => {
 
 exports.getComponents = async (req, res) => {
     try {
-        const { type, search } = req.query;
+        const { 
+            type, 
+            search, 
+            page = 1, 
+            limit = 20, 
+            sortKey = 'updatedAt', 
+            sortDir = 'desc' 
+        } = req.query;
+
+        const skip = (parseInt(page) - 1) * parseInt(limit);
+        const take = parseInt(limit);
         const where = {};
 
         if (type && type !== "All") {
@@ -50,33 +60,42 @@ exports.getComponents = async (req, res) => {
                 { manufacturer: { contains: search, mode: "insensitive" } },
                 { model_name: { contains: search, mode: "insensitive" } },
                 { model_number: { contains: search, mode: "insensitive" } },
-                { vendor: { contains: search, mode: "insensitive" } },
             ];
         }
 
-        const components = await prisma.component.findMany({
-            where,
-            select: {
-                id: true,
-                type: true,
-                manufacturer: true,
-                vendor: true,
-                model_name: true,
-                model_number: true,
-                product_page_url: true,
-                price: true,
-                discounted_price: true,
-                tracked_price: true,
-                updatedAt: true,
-                offers: {
-                    where: { in_stock: true },
-                    orderBy: { price: "asc" },
-                    take: 1,
-                    select: { price: true, vendor: true },
+        // Backend sorting logic
+        const orderBy = {};
+        // Map frontend keys to DB columns if different
+        const dbSortKey = sortKey === 'price' ? 'price' : sortKey;
+        orderBy[dbSortKey] = sortDir;
+
+        const [totalItems, components] = await prisma.$transaction([
+            prisma.component.count({ where }),
+            prisma.component.findMany({
+                where,
+                skip,
+                take,
+                orderBy,
+                select: {
+                    id: true,
+                    type: true,
+                    manufacturer: true,
+                    vendor: true,
+                    model_name: true,
+                    model_number: true,
+                    price: true,
+                    discounted_price: true,
+                    tracked_price: true,
+                    updatedAt: true,
+                    offers: {
+                        where: { in_stock: true },
+                        orderBy: { price: "asc" },
+                        take: 1,
+                        select: { price: true, vendor: true },
+                    },
                 },
-            },
-            orderBy: { updatedAt: "desc" },
-        });
+            })
+        ]);
 
         const formatted = components.map((c) => ({
             id: c.id,
@@ -86,14 +105,20 @@ exports.getComponents = async (req, res) => {
             vendor: c.vendor || (c.offers[0] ? c.offers[0].vendor : "N/A"),
             model_name: c.model_name,
             model_number: c.model_number,
-            product_page_url: c.product_page_url,
             price: c.price ? parseFloat(c.price) : null,
             discounted_price: c.discounted_price ? parseFloat(c.discounted_price) : null,
             tracked_price: c.tracked_price ? parseFloat(c.tracked_price) : null,
             updatedAt: c.updatedAt instanceof Date ? c.updatedAt.toISOString() : null,
         }));
 
-        res.json(formatted);
+        res.json({
+            data: formatted,
+            meta: {
+                totalItems,
+                totalPages: Math.ceil(totalItems / take),
+                currentPage: parseInt(page)
+            }
+        });
     } catch (error) {
         res.status(500).json({ error: "Failed to fetch components" });
     }
