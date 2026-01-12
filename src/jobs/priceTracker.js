@@ -33,7 +33,7 @@ async function processSingleLink(comp) {
 }
 
 async function runPriceTracker() {
-    console.log("\n[Job] 🚀 1-Minute Price Tracker Started");
+    console.log("\n[Job] 🚀 24-Hour Price Tracker Started");
     try {
         // Fetch all components that have a product_page_url
         const trackedComponents = await prisma.component.findMany({
@@ -50,11 +50,11 @@ async function runPriceTracker() {
         for (const comp of trackedComponents) {
             await processSingleLink(comp);
             
-            // Wait 3 seconds between requests to avoid IP blocking
-            await new Promise(resolve => setTimeout(resolve, 3000)); 
+            // Wait 10 seconds between requests to avoid IP blocking and server load
+            await new Promise(resolve => setTimeout(resolve, 10000)); 
         }
         
-        console.log("[Job] 💤 Price Tracker finished current cycle. Waiting for next minute...\n");
+        console.log("[Job] 💤 Price Tracker finished current cycle. Waiting for next 24 hours...\n");
     } catch (e) {
         console.error("[Job] 🔥 Critical Failure in runPriceTracker:", e.message);
     }
