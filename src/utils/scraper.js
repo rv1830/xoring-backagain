@@ -2,13 +2,21 @@ const puppeteer = require('puppeteer');
 
 const parsePrice = (priceStr) => {
     if (!priceStr) return 0;
-    const matches = priceStr.match(/[\d,.]+/g);
+    
+    // Step 1: Agar string mein decimal (.) hai, toh sirf pehle wala hissa lo (Paisa hata do)
+    // Jaise: "5,310.00" -> "5,310"
+    const cleanStr = priceStr.split('.')[0];
+    
+    // Step 2: Sirf digits nikalne ke liye regex use karo
+    const matches = cleanStr.match(/[\d,]+/g);
     if (!matches) return 0;
+    
+    // Step 3: Comma hatao aur number mein convert karo
     const prices = matches
         .map(m => parseInt(m.replace(/[^\d]/g, '')))
         .filter(n => !isNaN(n) && n > 0);
+        
     if (prices.length === 0) return 0;
-    // Offer price hamesha minimum hota hai
     return Math.min(...prices);
 };
 
@@ -33,7 +41,6 @@ async function scrapeUrl(url) {
     await page.setExtraHTTPHeaders({ 'Accept-Language': 'en-US,en;q=0.9' });
 
     try {
-        // networkidle2 use kiya hai taaki dynamic prices load ho jayein
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
         
         const title = await page.title();
@@ -84,7 +91,6 @@ async function scrapeUrl(url) {
         else if (url.includes('primeabgb.com')) {
             vendor = "primeabgb";
             rawPriceText = await page.evaluate(() => {
-                // Strictly targeting the selector from your image
                 const summary = document.querySelector('.summary.entry-summary');
                 if (summary) {
                     const insPrice = summary.querySelector('ins .woocommerce-Price-amount');
