@@ -1,6 +1,5 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
-// Ensure the path to scraper is correct based on your folder structure
 const { scrapeUrl } = require('../utils/scraper'); 
 
 async function processSingleLink(comp) {
@@ -18,11 +17,10 @@ async function processSingleLink(comp) {
         }
 
         // 2. Update DB (Directly in Component Table)
-        // Updating tracked_price and updatedAt timestamp
         await prisma.component.update({
             where: { id: comp.id },
             data: {
-                tracked_price: data.price,
+                tracked_price: data.price.toString(), // Database type ke according string ya number
                 updatedAt: new Date()
             }
         });
@@ -53,7 +51,6 @@ async function runPriceTracker() {
             await processSingleLink(comp);
             
             // Wait 3 seconds between requests to avoid IP blocking
-            // Using a shorter delay for your 1-minute test
             await new Promise(resolve => setTimeout(resolve, 3000)); 
         }
         

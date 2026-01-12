@@ -8,6 +8,7 @@ const parsePrice = (priceStr) => {
         .map(m => parseInt(m.replace(/[^\d]/g, '')))
         .filter(n => !isNaN(n) && n > 0);
     if (prices.length === 0) return 0;
+    // Offer price hamesha minimum hota hai
     return Math.min(...prices);
 };
 
@@ -32,7 +33,8 @@ async function scrapeUrl(url) {
     await page.setExtraHTTPHeaders({ 'Accept-Language': 'en-US,en;q=0.9' });
 
     try {
-        await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
+        // networkidle2 use kiya hai taaki dynamic prices load ho jayein
+        await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
         
         const title = await page.title();
         console.log(`[Scraper] 📄 Page Title: "${title}"`);
@@ -51,11 +53,18 @@ async function scrapeUrl(url) {
         if (url.includes('mdcomputers.in')) {
             vendor = "mdcomputers";
             rawPriceText = await page.evaluate(() => {
-                const el = document.querySelector('.price-new') || 
-                           document.querySelector('.product-price') || 
-                           document.querySelector('.price') || 
-                           document.querySelector('.right-content-product .price');
-                return el?.innerText || '0';
+                // Strictly targeting the main product price box from your image
+                const priceBox = document.querySelector('.product-price-info-group .price-box');
+                if (priceBox) {
+                    const specialPrice = priceBox.querySelector('h2.special-price');
+                    if (specialPrice) return specialPrice.innerText;
+                }
+                
+                // Fallback selectors
+                const fallback = document.querySelector('.price-new') || 
+                                 document.querySelector('.product-price') || 
+                                 document.querySelector('.price');
+                return fallback?.innerText || '0';
             });
             
             inStock = await page.evaluate(() => {
