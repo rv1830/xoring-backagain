@@ -1,98 +1,65 @@
-// src/jobs/priceTracker.js
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 // Ensure the path to scraper is correct based on your folder structure
 const { scrapeUrl } = require('../utils/scraper'); 
 
-async function processSingleLink(link) {
+async function processSingleLink(comp) {
     try {
-        console.log(`[Job] 🔎 Processing: ${link.externalUrl}`);
+        console.log(`[Job] 🔎 Processing Component: ${comp.model_name}`);
+        console.log(`[Job] 🌐 URL: ${comp.product_page_url}`);
         
         // 1. Scrape Data
-        const data = await scrapeUrl(link.externalUrl);
+        const data = await scrapeUrl(comp.product_page_url);
         
         // Validation: If scrape failed or price is 0
         if (!data || !data.price || data.price === 0) {
-            console.log(`[Job] ⚠️ Skipped (No Data/Zero Price): ${link.externalUrl}`);
+            console.log(`[Job] ⚠️ Skipped (No Data/Zero Price) for: ${comp.model_name}`);
             return;
         }
 
-        const vendorName = data.vendor || "Unknown";
-        
-        // 2. Update DB (Offers Table)
-        // Check if we already have an offer for this Component + Vendor
-        const existingOffer = await prisma.offer.findFirst({
-            where: {
-                componentId: link.componentId,
-                vendor: vendorName // ✅ FIXED: Schema uses 'vendor', not 'vendorId'
+        // 2. Update DB (Directly in Component Table)
+        // Updating tracked_price and updatedAt timestamp
+        await prisma.component.update({
+            where: { id: comp.id },
+            data: {
+                tracked_price: data.price,
+                updatedAt: new Date()
             }
         });
 
-        if (existingOffer) {
-            // Update existing offer
-            await prisma.offer.update({
-                where: { id: existingOffer.id },
-                data: {
-                    price: data.price,
-                    effective_price: data.price, // Assuming free shipping or same logic
-                    in_stock: data.inStock,
-                    url: link.externalUrl, // Ensure URL is up to date
-                    updatedAt: new Date()
-                }
-            });
-            console.log(`[Job] ✅ Offer Updated: ₹${data.price} (${vendorName})`);
-        } else {
-            // Create new offer
-            await prisma.offer.create({
-                data: {
-                    componentId: link.componentId,
-                    vendor: vendorName, // ✅ FIXED: Schema uses 'vendor'
-                    price: data.price,
-                    effective_price: data.price,
-                    in_stock: data.inStock,
-                    url: link.externalUrl, // ✅ FIXED: Schema uses 'url', not 'vendor_url'
-                    sourceId: "scraper-auto",
-                    shipping: 0
-                }
-            });
-            console.log(`[Job] ✅ New Offer Created: ₹${data.price} (${vendorName})`);
-        }
-
-        // 3. Update ExternalId timestamp (Heartbeat)
-        await prisma.externalId.update({
-            where: { id: link.id },
-            data: { lastCheckedAt: new Date() }
-        });
+        console.log(`[Job] ✅ Success: ₹${data.price} updated for ${comp.model_name}`);
 
     } catch (error) {
-        console.error(`[Job] ❌ Error processing link ${link.id}: ${error.message}`);
+        console.error(`[Job] ❌ Error processing component ${comp.id}: ${error.message}`);
     }
 }
 
 async function runPriceTracker() {
-    console.log("[Job] 🚀 Bulk Tracker Started");
+    console.log("\n[Job] 🚀 1-Minute Price Tracker Started");
     try {
-        // 
-        // This query fetches all active tracking links to process
-        const trackedLinks = await prisma.externalId.findMany({
+        // Fetch all components that have a product_page_url
+        const trackedComponents = await prisma.component.findMany({
             where: {
-                externalUrl: { 
-                    not: "" // ✅ FIXED: Required strings cannot be null, check for empty string
-                }, 
-                isActive: true
+                product_page_url: { 
+                    not: null,
+                    not: "" 
+                }
             }
         });
 
-        console.log(`[Job] Found ${trackedLinks.length} active links.`);
+        console.log(`[Job] Found ${trackedComponents.length} components with active URLs.`);
 
-        for (const link of trackedLinks) {
-            await processSingleLink(link);
+        for (const comp of trackedComponents) {
+            await processSingleLink(comp);
+            
             // Wait 3 seconds between requests to avoid IP blocking
+            // Using a shorter delay for your 1-minute test
             await new Promise(resolve => setTimeout(resolve, 3000)); 
         }
-        console.log("[Job] 💤 Bulk Tracker Sleep");
+        
+        console.log("[Job] 💤 Price Tracker finished current cycle. Waiting for next minute...\n");
     } catch (e) {
-        console.error("[Job] 🔥 Critical Failure:", e.message);
+        console.error("[Job] 🔥 Critical Failure in runPriceTracker:", e.message);
     }
 }
 

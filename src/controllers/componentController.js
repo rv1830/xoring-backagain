@@ -1,6 +1,6 @@
 const { PrismaClient } = require("@prisma/client");
 const prisma = new PrismaClient();
-const { scrapeSpecs } = require("../utils/scraper");
+const { scrapeSpecs, scrapeUrl } = require("../utils/scraper"); // Added scrapeUrl to imports
 
 // --- Helpers to prevent NaN and Type Errors ---
 const parseNum = (val) => {
@@ -127,7 +127,6 @@ exports.getComponentById = async (req, res) => {
 
         if (!base) return res.status(404).json({ error: "Not found" });
 
-        // Clean null relations based on component type
         const currentRelationKey = base.type.toLowerCase();
         const relationKeys = [
             "processor", "motherboard", "graphics_card", "power_supply", 
@@ -148,6 +147,7 @@ exports.getComponentById = async (req, res) => {
 };
 
 exports.createComponent = async (req, res) => {
+    console.log("--- [Create Component] Process Started ---");
     try {
         const {
             type, manufacturer, vendor, model_name, model_number,
@@ -156,13 +156,26 @@ exports.createComponent = async (req, res) => {
         } = req.body;
 
         if (!type || !manufacturer || !model_name || !model_number) {
+            console.log("[Create Component] Error: Missing required fields");
             return res.status(400).json({
                 error: "Type, Manufacturer, Model Name and Model Number are required",
             });
         }
 
+        // --- INSTANT SCRAPE LOGIC ---
+        let initialTrackedPrice = tracked_price ? parseFloatNum(tracked_price) : null;
+        if (product_page_url) {
+            console.log(`[Scraper] Initializing immediate price fetch for: ${product_page_url}`);
+            const scrapedData = await scrapeUrl(product_page_url);
+            if (scrapedData && scrapedData.price) {
+                initialTrackedPrice = scrapedData.price;
+                console.log(`[Scraper] Successfully fetched price: ₹${initialTrackedPrice}`);
+            } else {
+                console.log("[Scraper] No price found during initial fetch.");
+            }
+        }
+
         const result = await prisma.$transaction(async (tx) => {
-            // 1. Create Base Component
             const comp = await tx.component.create({
                 data: {
                     type,
@@ -173,7 +186,7 @@ exports.createComponent = async (req, res) => {
                     product_page_url: product_page_url || null,
                     price: price ? parseFloatNum(price) : null,
                     discounted_price: discounted_price ? parseFloatNum(discounted_price) : null,
-                    tracked_price: tracked_price ? parseFloatNum(tracked_price) : null,
+                    tracked_price: initialTrackedPrice, // Set the scraped price here
                     specs: specs || {},
                     offers: price ? {
                         create: {
@@ -186,7 +199,6 @@ exports.createComponent = async (req, res) => {
                 },
             });
 
-            // 2. Create Specific Model entry using getPrismaModelName
             const modelKey = getPrismaModelName(type);
 
             if (modelKey && tx[modelKey]) {
@@ -202,24 +214,36 @@ exports.createComponent = async (req, res) => {
             return comp;
         });
 
+        console.log(`--- [Create Component] Success: Component Created with ID ${result.id} ---`);
         res.status(201).json({ id: result.id, message: "Component created successfully" });
     } catch (error) {
-        console.error("Error creating component:", error);
+        console.error("--- [Create Component] Critical Failure ---", error.message);
         res.status(500).json({ error: error.message || "Failed to create component" });
     }
 };
 
 exports.updateComponent = async (req, res) => {
+    const { id } = req.params;
+    console.log(`--- [Update Component] ID: ${id} started ---`);
     try {
-        const { id } = req.params;
         const {
             type, manufacturer, vendor, model_name, model_number,
             product_page_url, price, discounted_price, tracked_price,
             specs, tech_specs, core_custom_data
         } = req.body;
 
+        // --- INSTANT SCRAPE LOGIC FOR UPDATE ---
+        let updatedTrackedPrice = tracked_price ? parseFloatNum(tracked_price) : undefined;
+        if (product_page_url) {
+            console.log(`[Scraper] Re-checking price for updated URL: ${product_page_url}`);
+            const scrapedData = await scrapeUrl(product_page_url);
+            if (scrapedData && scrapedData.price) {
+                updatedTrackedPrice = scrapedData.price;
+                console.log(`[Scraper] Price updated successfully: ₹${updatedTrackedPrice}`);
+            }
+        }
+
         const result = await prisma.$transaction(async (tx) => {
-            // 1. Update Core Component
             const updatedComp = await tx.component.update({
                 where: { id },
                 data: {
@@ -231,13 +255,12 @@ exports.updateComponent = async (req, res) => {
                     product_page_url: product_page_url || null,
                     price: price ? parseFloatNum(price) : null,
                     discounted_price: discounted_price ? parseFloatNum(discounted_price) : null,
-                    tracked_price: tracked_price ? parseFloatNum(tracked_price) : null,
+                    tracked_price: updatedTrackedPrice, // Update the price here
                     specs: specs || {},
                     updatedAt: new Date()
                 },
             });
 
-            // 2. Update Specific Model using getPrismaModelName
             const modelKey = getPrismaModelName(type);
 
             if (modelKey && tx[modelKey]) {
@@ -258,9 +281,10 @@ exports.updateComponent = async (req, res) => {
             result.updatedAt = result.updatedAt.toISOString();
         }
 
+        console.log("--- [Update Component] Success: Data Synchronized ---");
         res.json({ success: true, data: result });
     } catch (error) {
-        console.error("Update Error:", error);
+        console.error("--- [Update Component] Failure ---", error.message);
         res.status(500).json({ error: error.message });
     }
 };

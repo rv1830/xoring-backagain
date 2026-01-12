@@ -15,10 +15,12 @@ app.use(express.urlencoded({ extended: true }));
 // --- ROUTES ---
 app.use('/api', apiRoutes);
 
-// cron.schedule('* * * * *', () => {
-//     console.log("⏰ 1-Minute Scheduler Triggered");
-//     runPriceTracker();
-// });
+// --- CRON SCHEDULER (Every 1 Minute) ---
+cron.schedule('* * * * *', () => {
+    console.log("--------------------------------------------------");
+    console.log("⏰ 1-Minute Timer Hit: Starting Price Sync Job");
+    runPriceTracker();
+});
 
 app.get('/', (req, res) => {
   res.send('XO Rig Backend is running');
@@ -29,6 +31,7 @@ if (require.main === module) {
     const PORT = process.env.PORT || 5000;
     app.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
+      console.log("✅ Background Price Tracker is now ACTIVE");
     });
 }
 
